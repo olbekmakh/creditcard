@@ -1,100 +1,47 @@
-package main
+package creditcard
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
-	"os"
+	"math/rand"
+	"sort"
 	"strings"
-
-	"creditcard"
+	"time"
 )
 
-func main() {
-	args := os.Args
-	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "no command specified")
-		os.Exit(1)
+func GenerateAll(pattern string) ([]string, error) {
+	count := strings.Count(pattern, "*")
+	if count > 4 {
+		return nil, errors.New("too many asterisks")
+	}
+	if !strings.HasSuffix(pattern, strings.Repeat("*", count)) {
+		return nil, errors.New("asterisks must be at the end")
 	}
 
-	switch args[1] {
-	case "validate":
-		validate(args[2:])
-	case "generate":
-		generate(args[2:])
-	default:
-		fmt.Fprintln(os.Stderr, "unknown command:", args[1])
-		os.Exit(1)
+	base := strings.TrimRight(pattern, "*")
+	limit := 1
+	for i := 0; i < count; i++ {
+		limit *= 10
 	}
+
+	var result []string
+	for i := 0; i < limit; i++ {
+		suffix := fmt.Sprintf("%0*d", count, i)
+		full := base + suffix
+		if IsValidLuhn(full) {
+			result = append(result, full)
+		}
+	}
+
+	sort.Strings(result)
+	return result, nil
 }
 
-func validate(args []string) {
-	readFromStdin := false
-	var numbers []string
-
-	for _, arg := range args {
-		if arg == "--stdin" {
-			readFromStdin = true
-		} else {
-			numbers = append(numbers, arg)
-		}
+func GenerateOne(pattern string) (string, error) {
+	valids, err := GenerateAll(pattern)
+	if err != nil || len(valids) == 0 {
+		return "", errors.New("no valid numbers")
 	}
-
-	if readFromStdin {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			line := scanner.Text()
-			numbers = append(numbers, strings.Fields(line)...)
-		}
-		if err := scanner.Err(); err != nil {
-			fmt.Fprintln(os.Stderr, "stdin error:", err)
-			os.Exit(1)
-		}
-	}
-
-	status := 0
-	for _, number := range numbers {
-		if creditcard.IsValidLuhn(number) {
-			fmt.Println("OK")
-		} else {
-			fmt.Fprintln(os.Stderr, "INCORRECT")
-			status = 1
-		}
-	}
-
-	os.Exit(status)
-}
-
-func generate(args []string) {
-	pick := false
-	var template string
-
-	for _, arg := range args {
-		if arg == "--pick" {
-			pick = true
-		} else if template == "" {
-			template = arg
-		}
-	}
-
-	if template == "" {
-		fmt.Fprintln(os.Stderr, "missing card template")
-		os.Exit(1)
-	}
-
-	if pick {
-		card, err := creditcard.PickRandomCard(template)
-		if err != nil {
-			os.Exit(1)
-		}
-		fmt.Println(card)
-		return
-	}
-
-	cards, err := creditcard.GenerateCardNumbers(template)
-	if err != nil {
-		os.Exit(1)
-	}
-	for _, c := range cards {
-		fmt.Println(c)
-	}
+	rand.Seed(time.Now().UnixNano())
+	return valids[rand.Intn(len(valids))], nil
 }
