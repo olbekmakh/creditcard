@@ -2,61 +2,64 @@ package creditcard
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 )
 
-type CardInfo struct {
-	Number string
-	Valid  bool
-	Brand  string
-	Issuer string
+func loadMapping(path string) (map[string]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	mapping := make(map[string]string)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		prefix := strings.TrimSpace(parts[1])
+		mapping[prefix] = name
+	}
+	return mapping, nil
 }
 
-func LoadInfoFiles(brandsPath, issuersPath string) (map[string]string, map[string]string, error) {
-	brandMap := make(map[string]string)
-	issuerMap := make(map[string]string)
-
-	read := func(path string, target map[string]string) error {
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if parts := strings.SplitN(line, ":", 2); len(parts) == 2 {
-				target[parts[1]] = parts[0]
-			}
-		}
-		return scanner.Err()
-	}
-
-	if err := read(brandsPath, brandMap); err != nil {
-		return nil, nil, err
-	}
-	if err := read(issuersPath, issuerMap); err != nil {
-		return nil, nil, err
-	}
-	return brandMap, issuerMap, nil
-}
-
-func GetCardInfo(number string, brands, issuers map[string]string) CardInfo {
-	info := CardInfo{Number: number, Valid: IsValidLuhn(number)}
-	info.Brand = "-"
-	info.Issuer = "-"
-	for prefix, brand := range brands {
+func findMatch(number string, mapping map[string]string) string {
+	for prefix, name := range mapping {
 		if strings.HasPrefix(number, prefix) {
-			info.Brand = brand
-			break
+			return name
 		}
 	}
-	for prefix, issuer := range issuers {
-		if strings.HasPrefix(number, prefix) {
-			info.Issuer = issuer
-			break
-		}
-	}
-	return info
+	return "-"
 }
+
+func Information(numbers []string, brandsFile, issuersFile string) {
+	brands, err := loadMapping(brandsFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to read brands:", err)
+		return
+	}
+	issuers, err := loadMapping(issuersFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to read issuers:", err)
+		return
+	}
+
+	for _, number := range numbers {
+		fmt.Println(number)
+		valid := ValidateCardNumber(number)
+		if valid {
+			fmt.Println("Correct: yes")
+		} else {
+			fmt.Println("Correct: no")
+		}
+		fmt.Println("Card Brand:", findMatch(number, brands))
+		fmt.Println("Card Issuer:", findMatch(number, issuers))
+	}
+}
+

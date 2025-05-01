@@ -1,8 +1,8 @@
 package main
 
 import (
-	"creditcard/creditcard"
 	"bufio"
+	"creditcard/creditcard"
 	"fmt"
 	"os"
 	"strings"
@@ -10,162 +10,119 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: creditcard <command>")
+		fmt.Fprintln(os.Stderr, "No command provided")
 		os.Exit(1)
 	}
-	cmd := os.Args[1]
+
+	command := os.Args[1]
 	args := os.Args[2:]
 
-	switch cmd {
+	switch command {
 	case "validate":
-		validate(args)
+		handleValidate(args)
 	case "generate":
-		generate(args)
+		handleGenerate(args)
 	case "information":
-		information(args)
+		handleInformation(args)
 	case "issue":
-		issue(args)
+		handleIssue(args)
 	default:
-		fmt.Fprintln(os.Stderr, "unknown command:", cmd)
+		fmt.Fprintln(os.Stderr, "Invalid command. Use --help for usage details.")
 		os.Exit(1)
 	}
 }
 
-func validate(args []string) {
-	useStdin := len(args) > 0 && args[0] == "--stdin"
-	var numbers []string
-
-	if useStdin {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			parts := strings.Fields(scanner.Text())
-			numbers = append(numbers, parts...)
-		}
-	} else {
-		numbers = args
-	}
-
-	status := 0
-	for _, number := range numbers {
-		if creditcard.IsValidLuhn(number) {
-			fmt.Println("OK")
-		} else {
-			fmt.Fprintln(os.Stderr, "INCORRECT")
-			status = 1
-		}
-	}
-	os.Exit(status)
-}
-
-func generate(args []string) {
-	usePick := false
-	var input string
-	for _, arg := range args {
-		if arg == "--pick" {
-			usePick = true
-		} else {
-			input = arg
-		}
-	}
-	if usePick {
-		n, err := creditcard.GenerateOne(input)
-		if err != nil {
-			os.Exit(1)
-		}
-		fmt.Println(n)
-	} else {
-		nums, err := creditcard.GenerateAll(input)
-		if err != nil {
-			os.Exit(1)
-		}
-		for _, n := range nums {
-			fmt.Println(n)
-		}
-	}
-}
-
-func information(args []string) {
-	var brandFile, issuerFile string
+func handleValidate(args []string) {
 	useStdin := false
 	var numbers []string
 
 	for _, arg := range args {
-		switch {
-		case strings.HasPrefix(arg, "--brands="):
-			brandFile = strings.TrimPrefix(arg, "--brands=")
-		case strings.HasPrefix(arg, "--issuers="):
-			issuerFile = strings.TrimPrefix(arg, "--issuers=")
-		case arg == "--stdin":
+		if arg == "--stdin" {
 			useStdin = true
-		default:
+		} else {
 			numbers = append(numbers, arg)
 		}
-	}
-
-	if brandFile == "" || issuerFile == "" {
-		fmt.Fprintln(os.Stderr, "missing --brands or --issuers")
-		os.Exit(1)
-	}
-
-	brandMap, issuerMap, err := creditcard.LoadInfoFiles(brandFile, issuerFile)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
 
 	if useStdin {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			parts := strings.Fields(scanner.Text())
-			numbers = append(numbers, parts...)
+			fields := strings.Fields(scanner.Text())
+			numbers = append(numbers, fields...)
 		}
 	}
 
-	for _, n := range numbers {
-		info := creditcard.GetCardInfo(n, brandMap, issuerMap)
-		fmt.Println(info.Number)
-		if info.Valid {
-			fmt.Println("Correct: yes")
+	for _, number := range numbers {
+		if creditcard.ValidateCardNumber(number) {
+			fmt.Println("OK")
 		} else {
-			fmt.Println("Correct: no")
+			fmt.Fprintln(os.Stderr, "INCORRECT")
+			os.Exit(1)
 		}
-		fmt.Println("Card Brand:", info.Brand)
-		fmt.Println("Card Issuer:", info.Issuer)
 	}
 }
 
-func issue(args []string) {
-	var brandPath, issuerPath, brand, issuer string
+func handleGenerate(args []string) {
+	pick := false
+	var template string
 
 	for _, arg := range args {
-		switch {
-		case strings.HasPrefix(arg, "--brands="):
-			brandPath = strings.TrimPrefix(arg, "--brands=")
-		case strings.HasPrefix(arg, "--issuers="):
-			issuerPath = strings.TrimPrefix(arg, "--issuers=")
-		case strings.HasPrefix(arg, "--brand="):
+		if arg == "--pick" {
+			pick = true
+		} else {
+			template = arg
+		}
+	}
+
+	if err := creditcard.Generate(template, pick); err != nil {
+		os.Exit(1)
+	}
+}
+
+func handleInformation(args []string) {
+	var brandsFile, issuersFile string
+	var numbers []string
+	useStdin := false
+
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--brands=") {
+			brandsFile = strings.TrimPrefix(arg, "--brands=")
+		} else if strings.HasPrefix(arg, "--issuers=") {
+			issuersFile = strings.TrimPrefix(arg, "--issuers=")
+		} else if arg == "--stdin" {
+			useStdin = true
+		} else {
+			numbers = append(numbers, arg)
+		}
+	}
+
+	if useStdin {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			fields := strings.Fields(scanner.Text())
+			numbers = append(numbers, fields...)
+		}
+	}
+
+	creditcard.Information(numbers, brandsFile, issuersFile)
+}
+
+func handleIssue(args []string) {
+	var brandsFile, issuersFile, brand, issuer string
+
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--brands=") {
+			brandsFile = strings.TrimPrefix(arg, "--brands=")
+		} else if strings.HasPrefix(arg, "--issuers=") {
+			issuersFile = strings.TrimPrefix(arg, "--issuers=")
+		} else if strings.HasPrefix(arg, "--brand=") {
 			brand = strings.TrimPrefix(arg, "--brand=")
-		case strings.HasPrefix(arg, "--issuer="):
+		} else if strings.HasPrefix(arg, "--issuer=") {
 			issuer = strings.TrimPrefix(arg, "--issuer=")
 		}
 	}
 
-	if brandPath == "" || issuerPath == "" || brand == "" || issuer == "" {
-		fmt.Fprintln(os.Stderr, "missing --brands, --issuers, --brand or --issuer")
+	if err := creditcard.Issue(brandsFile, issuersFile, brand, issuer); err != nil {
 		os.Exit(1)
 	}
-
-	brandMap, issuerMap, err := creditcard.LoadInfoFiles(brandPath, issuerPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "failed to load brand/issuer files:", err)
-		os.Exit(1)
-	}
-
-	num, err := creditcard.IssueCardNumber(brand, issuer, brandMap, issuerMap)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
-
-	fmt.Println(num)
 }

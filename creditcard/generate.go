@@ -1,7 +1,6 @@
 package creditcard
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -9,39 +8,49 @@ import (
 	"time"
 )
 
-func GenerateAll(pattern string) ([]string, error) {
-	count := strings.Count(pattern, "*")
-	if count > 4 {
-		return nil, errors.New("too many asterisks")
+func Generate(template string, pick bool) error {
+	stars := strings.Count(template, "*")
+	if stars == 0 {
+		return fmt.Errorf("no asterisks to replace")
 	}
-	if !strings.HasSuffix(pattern, strings.Repeat("*", count)) {
-		return nil, errors.New("asterisks must be at the end")
-	}
-
-	base := strings.TrimRight(pattern, "*")
-	limit := 1
-	for i := 0; i < count; i++ {
-		limit *= 10
+	if stars > 4 || !strings.HasSuffix(template, strings.Repeat("*", stars)) {
+		return fmt.Errorf("invalid template format")
 	}
 
-	var result []string
-	for i := 0; i < limit; i++ {
-		suffix := fmt.Sprintf("%0*d", count, i)
-		full := base + suffix
-		if IsValidLuhn(full) {
-			result = append(result, full)
+	prefix := template[:len(template)-stars]
+	max := intPow(10, stars)
+
+	var results []string
+	for i := 0; i < max; i++ {
+		suffix := fmt.Sprintf("%0*d", stars, i)
+		candidate := prefix + suffix
+		if ValidateCardNumber(candidate) {
+			results = append(results, candidate)
 		}
 	}
 
-	sort.Strings(result)
-	return result, nil
+	if len(results) == 0 {
+		return fmt.Errorf("no valid cards generated")
+	}
+
+	if pick {
+		rand.Seed(time.Now().UnixNano())
+		fmt.Println(results[rand.Intn(len(results))])
+		return nil
+	}
+
+	sort.Strings(results)
+	for _, r := range results {
+		fmt.Println(r)
+	}
+	return nil
 }
 
-func GenerateOne(pattern string) (string, error) {
-	valids, err := GenerateAll(pattern)
-	if err != nil || len(valids) == 0 {
-		return "", errors.New("no valid numbers")
+func intPow(a, b int) int {
+	result := 1
+	for b > 0 {
+		result *= a
+		b--
 	}
-	rand.Seed(time.Now().UnixNano())
-	return valids[rand.Intn(len(valids))], nil
+	return result
 }

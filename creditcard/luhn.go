@@ -1,34 +1,33 @@
 package creditcard
 
 import (
-	"strings"
 	"unicode"
 )
 
-func IsValidLuhn(number string) bool {
-	number = strings.TrimSpace(number)
+func ValidateCardNumber(number string) bool {
 	if len(number) < 13 {
 		return false
 	}
 
 	var sum int
-	var alt bool
+	double := false
 
 	for i := len(number) - 1; i >= 0; i-- {
 		r := rune(number[i])
 		if !unicode.IsDigit(r) {
 			return false
 		}
-		d := int(r - '0')
-		if alt {
-			d *= 2
-			if d > 9 {
-				d -= 9
+		digit := int(r - '0')
+		if double {
+			digit *= 2
+			if digit > 9 {
+				digit -= 9
 			}
 		}
-		sum += d
-		alt = !alt
+		sum += digit
+		double = !double
 	}
 
 	return sum%10 == 0
 }
+

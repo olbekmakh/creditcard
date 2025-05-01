@@ -1,50 +1,68 @@
 package creditcard
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 )
 
-func IssueCardNumber(brand, issuer string, brandMap, issuerMap map[string]string) (string, error) {
-	var brandPrefix, issuerPrefix string
-	for prefix, name := range brandMap {
-		if name == brand {
+func Issue(brandsFile, issuersFile, brand, issuer string) error {
+	brands, err := loadMapping(brandsFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to load brands:", err)
+		return err
+	}
+	issuers, err := loadMapping(issuersFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to load issuers:", err)
+		return err
+	}
+
+	var brandPrefix string
+	for prefix, b := range brands {
+		if b == brand {
 			brandPrefix = prefix
 			break
 		}
 	}
-	for prefix, name := range issuerMap {
-		if name == issuer {
+	if brandPrefix == "" {
+		fmt.Fprintln(os.Stderr, "Brand not found")
+		return fmt.Errorf("brand not found")
+	}
+
+	var issuerPrefix string
+	for prefix, i := range issuers {
+		if i == issuer {
 			issuerPrefix = prefix
 			break
 		}
 	}
-	if brandPrefix == "" || issuerPrefix == "" || !strings.HasPrefix(issuerPrefix, brandPrefix) {
-		return "", errors.New("invalid brand/issuer combination")
+	if issuerPrefix == "" {
+		fmt.Fprintln(os.Stderr, "Issuer not found")
+		return fmt.Errorf("issuer not found")
 	}
 
-	length := 16
-	if brand == "AMEX" {
-		length = 15
+	if !strings.HasPrefix(issuerPrefix, brandPrefix) {
+		fmt.Fprintln(os.Stderr, "Issuer does not match brand prefix")
+		return fmt.Errorf("issuer mismatch")
 	}
 
 	rand.Seed(time.Now().UnixNano())
-	for attempts := 0; attempts < 1000; attempts++ {
-		restLen := length - len(issuerPrefix)
-		var sb strings.Builder
-		sb.WriteString(issuerPrefix)
-		for i := 0; i < restLen-1; i++ {
-			sb.WriteByte('0' + byte(rand.Intn(10)))
+	for {
+		bodyLen := 15 - len(issuerPrefix)
+		body := ""
+		for i := 0; i < bodyLen; i++ {
+			body += fmt.Sprint(rand.Intn(10))
 		}
-		for i := 0; i <= 9; i++ {
-			candidate := sb.String() + fmt.Sprint(i)
-			if IsValidLuhn(candidate) {
-				return candidate, nil
+		for i := 0; i < 10; i++ {
+			lastDigit := fmt.Sprint(i)
+			full := issuerPrefix + body + lastDigit
+			if ValidateCardNumber(full) {
+				fmt.Println(full)
+				return nil
 			}
 		}
 	}
-	return "", errors.New("could not generate valid number")
 }
