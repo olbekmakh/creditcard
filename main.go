@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	"creditcard/creditcard"
+	"creditcard/cmd"
 	"fmt"
 	"os"
 	"strings"
